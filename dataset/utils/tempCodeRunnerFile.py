@@ -1,0 +1,1 @@
+data=data, head=head, path='a.out')
