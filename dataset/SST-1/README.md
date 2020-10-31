@@ -78,3 +78,14 @@
 | **sentence**       | 句子                      |
 | **label**          | 句子标签【0，1，2，3，4】 |
 
+* **最大句长**：56
+
+* **平均句长**：18.89
+
+* **句子长度分布**：
+
+  ![sentence](\.md\sentence_length_distr.png)
+
+* **单词频率分布**：
+
+  ![words](\.md\word_show_distr.png)
