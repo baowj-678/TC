@@ -33,7 +33,7 @@ def collate_func(X):
     label = label[x_indices]
     # Pack
     x = pack_padded_sequence(x, x_length, batch_first=True)
-    return (x, x_length, label)
+    return (x, label)
 
 
 class DataLoader(DataLoader):

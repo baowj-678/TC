@@ -20,7 +20,6 @@ class MT_LSTM(NN.Module):
                  input_size=128,
                  hidden_size=128,
                  g=None,
-                 class_num=2,
                  batch_first=True,
                  device=torch.device('cpu')):
         super(MT_LSTM, self).__init__()
@@ -35,24 +34,25 @@ class MT_LSTM(NN.Module):
             
         self.hidden_size = hidden_size
         self.batch_first = batch_first
+        self.device = device
         # 参数初始化(mu=0, sigma=1.0)
         Sampler = tdist.Normal(torch.tensor(0.0), torch.tensor(1.0))
         # Parameters
         # input gate
-        self.W_i = NN.Parameter(Sampler.sample((1, hidden_size, input_size)), requires_grad=True)
-        self.U_i = NN.Parameter(Sampler.sample((self.g, hidden_size, hidden_size)), requires_grad=True)
-        self.V_i = NN.Parameter(Sampler.sample((self.g, hidden_size, hidden_size)), requires_grad=True)
+        self.W_i = NN.Parameter(Sampler.sample((1, hidden_size, input_size)), requires_grad=True).to(device)
+        self.U_i = NN.Parameter(Sampler.sample((self.g, hidden_size, hidden_size)), requires_grad=True).to(device)
+        self.V_i = NN.Parameter(Sampler.sample((self.g, hidden_size, hidden_size)), requires_grad=True).to(device)
         # forget gate
-        self.W_f = NN.Parameter(Sampler.sample((1, hidden_size, input_size)), requires_grad=True)
-        self.U_f = NN.Parameter(Sampler.sample((self.g, hidden_size, hidden_size)), requires_grad=True)
-        self.V_f = NN.Parameter(Sampler.sample((self.g, hidden_size, hidden_size)), requires_grad=True)
+        self.W_f = NN.Parameter(Sampler.sample((1, hidden_size, input_size)), requires_grad=True).to(device)
+        self.U_f = NN.Parameter(Sampler.sample((self.g, hidden_size, hidden_size)), requires_grad=True).to(device)
+        self.V_f = NN.Parameter(Sampler.sample((self.g, hidden_size, hidden_size)), requires_grad=True).to(device)
         # output gate
-        self.W_o = NN.Parameter(Sampler.sample((1, hidden_size, input_size)), requires_grad=True)
-        self.U_o = NN.Parameter(Sampler.sample((self.g, hidden_size, hidden_size)), requires_grad=True)
-        self.V_o = NN.Parameter(Sampler.sample((self.g, hidden_size, hidden_size)), requires_grad=True)
+        self.W_o = NN.Parameter(Sampler.sample((1, hidden_size, input_size)), requires_grad=True).to(device)
+        self.U_o = NN.Parameter(Sampler.sample((self.g, hidden_size, hidden_size)), requires_grad=True).to(device)
+        self.V_o = NN.Parameter(Sampler.sample((self.g, hidden_size, hidden_size)), requires_grad=True).to(device)
         # cell gate
-        self.W_c = NN.Parameter(Sampler.sample((1, hidden_size, input_size)), requires_grad=True)
-        self.U_c = NN.Parameter(Sampler.sample((self.g, hidden_size, hidden_size)), requires_grad=True)
+        self.W_c = NN.Parameter(Sampler.sample((1, hidden_size, input_size)), requires_grad=True).to(device)
+        self.U_c = NN.Parameter(Sampler.sample((self.g, hidden_size, hidden_size)), requires_grad=True).to(device)
         # Activate Func
         self.sigmoid = NN.Sigmoid()
         self.tanh = NN.Tanh()
@@ -73,7 +73,6 @@ class MT_LSTM(NN.Module):
         if isinstance(input, PackedSequence):
             input, input_length = pad_packed_sequence(input, batch_first=self.batch_first)
             is_packed = True
-        print(input.shape)
         # get sent length
         if input_length is not None:
             input_length_ = input_length.numpy().tolist()
@@ -92,9 +91,9 @@ class MT_LSTM(NN.Module):
         # get senetence max_length
         seq_length = input.shape[0]
         # MT-LSTM
-        output = torch.zeros(size=(seq_length, batch_size, self.hidden_size))
-        h_n = torch.zeros(size=(batch_size, self.hidden_size))
-        c_n= torch.zeros(size=(batch_size, self.hidden_size))
+        output = torch.zeros(size=(seq_length, batch_size, self.hidden_size), requires_grad=False).to(self.device)
+        h_n = torch.zeros(size=(batch_size, self.hidden_size), requires_grad=False).to(self.device)
+        c_n= torch.zeros(size=(batch_size, self.hidden_size), requires_grad=False).to(self.device)
         h_t = None
         c_t = None
         for t in range(1, seq_length, 1):
@@ -181,8 +180,8 @@ class MT_LSTM(NN.Module):
     def init_hidden_state(self, batch_size):
         """ 初始化开始的隐状态为0
         """
-        return (torch.zeros(size=[batch_size, self.hidden_size], dtype=torch.float32),
-                torch.zeros(size=[batch_size, self.hidden_size], dtype=torch.float32))
+        return (torch.zeros(size=[batch_size, self.hidden_size], dtype=torch.float32).to(self.device),
+                torch.zeros(size=[batch_size, self.hidden_size], dtype=torch.float32).to(self.device))
     
     def get_UV(self, t):
         """ 根据t，返回这一步骤参与的group
