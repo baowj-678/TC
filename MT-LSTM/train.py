@@ -3,8 +3,6 @@
 @Email: bwj_678@qq.com
 @Date: 2020/10/31
 """
-
-
 import pandas as pd
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 import numpy as np
@@ -24,19 +22,22 @@ from seed_all import seed_all
 if __name__ == '__main__':
     # 设置随机种子
     seed_all(42)
-    train_data_path = 'dataset/SST-1/test.tsv'
-    dev_data_path = 'dataset/SST-1/dev.tsv'
-    test_data_path = 'dataset/SST-1/test.tsv'
-    vocab_path = 'dataset/SST-1/vocab.txt'
-    save_path = 'dataset/SST-1/output/MT_LSTM.pkl'
+    data_dir = 'D:/NLP/TC/dataset/SST-1'
+    train_data_path = os.path.join(data_dir, 'test.tsv')
+    dev_data_path = os.path.join(data_dir, 'dev.tsv')
+    test_data_path = os.path.join(data_dir, 'test.tsv')
+    vocab_path = os.path.join(data_dir, 'vocab.txt')
+    save_path = 'output/MT_LSTM.pkl'
 
     BATCH_SIZE = 32
     max_length = 56
     embedding_size = 128
-    hidden_size = 128
-    lr = 3e-3
+    hidden_size = 64
+    lr = 0.1
     output_per_batchs = 10
     test_per_batchs = 60
+    test_batchs = 10
+    groups = 3
     # 加载字典
     vocab = Vocab(vocab_path)
     # 创建数据集
@@ -56,11 +57,12 @@ if __name__ == '__main__':
                   device=device,
                   ave_length=19,
                   embedding_size=embedding_size,
-                  num_class=5)
+                  num_class=5,
+                  g=groups)
     # 优化器
     optimizer = torch.optim.Adam(model.parameters(),
                                  lr=lr,
-                                 weight_decay=1e-3)
+                                 weight_decay=1e-5)
     # 开始训练
     for i in range(100):
         print('='*8 + '开始训练' + '='*8)
@@ -88,7 +90,21 @@ if __name__ == '__main__':
                         Y = Y.to(device=device).squeeze(dim=1)
                         y = model(X).detach()
                         accuracy += torch.sum(y == Y).cpu()
+                        if (epoch + 1) % test_batchs == 0:
+                            break   
                     print('正确个数:{}, 总数:{}, 测试结果accu: {}'.format(accuracy, len(test_data_set), float(accuracy) / len(test_data_set)))
                     torch.save(model.state_dict(), save_path)
                 model.train()
+######################################## 最终测试 #############################
+        print('-'*8 + '开始测试' + '-'*8)
+        with torch.no_grad():
+            accuracy = 0
+            model.eval()
+            for epoch, data in enumerate(test_data_loader):
+                X, Y = data
+                Y = Y.to(device=device).squeeze(dim=1)
+                y = model(X).detach()
+                accuracy += torch.sum(y == Y).cpu()
+            print('正确个数:{}, 总数:{}, 测试结果accu: {}'.format(accuracy, len(test_data_set), float(accuracy) / len(test_data_set)))
+            torch.save(model.state_dict(), save_path)
 

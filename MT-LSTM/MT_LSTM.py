@@ -4,12 +4,14 @@
               link: https://www.aclweb.org/anthology/D15-1280/
 @Author: Bao Wenjie
 @Email: bwj_678@qq.com
+@Github: https://github.com/baowj-678
 @Date: 2020/10/27
 """
 
 import torch
 import torch.nn as NN
 import torch.distributions as tdist
+from torch.nn import init
 from torch.nn.utils.rnn import *
 import numpy as np
 
@@ -31,28 +33,38 @@ class MT_LSTM(NN.Module):
         """
         if g is None:
             self.g = int(np.math.log2(ave_length) - 1)
-            
+        else:
+            self.g = g
         self.hidden_size = hidden_size
         self.batch_first = batch_first
         self.device = device
-        # 参数初始化(mu=0, sigma=1.0)
-        Sampler = tdist.Normal(torch.tensor(0.0), torch.tensor(1.0))
         # Parameters
         # input gate
-        self.W_i = NN.Parameter(Sampler.sample((1, hidden_size, input_size)), requires_grad=True).to(device)
-        self.U_i = NN.Parameter(Sampler.sample((self.g, hidden_size, hidden_size)), requires_grad=True).to(device)
-        self.V_i = NN.Parameter(Sampler.sample((self.g, hidden_size, hidden_size)), requires_grad=True).to(device)
+        self.W_i = NN.Parameter(torch.zeros((1, hidden_size, input_size), requires_grad=True)).to(device)
+        self.U_i = NN.Parameter(torch.zeros((self.g, hidden_size, hidden_size), requires_grad=True)).to(device)
+        self.V_i = NN.Parameter(torch.zeros((self.g, hidden_size, hidden_size), requires_grad=True)).to(device)
+        NN.init.uniform_(self.W_i, 0, 0.1)
+        NN.init.uniform_(self.U_i, 0, 0.1)
+        NN.init.uniform_(self.V_i, 0, 0.1)
         # forget gate
-        self.W_f = NN.Parameter(Sampler.sample((1, hidden_size, input_size)), requires_grad=True).to(device)
-        self.U_f = NN.Parameter(Sampler.sample((self.g, hidden_size, hidden_size)), requires_grad=True).to(device)
-        self.V_f = NN.Parameter(Sampler.sample((self.g, hidden_size, hidden_size)), requires_grad=True).to(device)
+        self.W_f = NN.Parameter(torch.zeros((1, hidden_size, input_size), requires_grad=True)).to(device)
+        self.U_f = NN.Parameter(torch.zeros((self.g, hidden_size, hidden_size), requires_grad=True)).to(device)
+        self.V_f = NN.Parameter(torch.zeros((self.g, hidden_size, hidden_size), requires_grad=True)).to(device)
+        NN.init.uniform_(self.W_f, 0, 0.1)
+        NN.init.uniform_(self.U_f, 0, 0.1)
+        NN.init.uniform_(self.V_f, 0, 0.1)
         # output gate
-        self.W_o = NN.Parameter(Sampler.sample((1, hidden_size, input_size)), requires_grad=True).to(device)
-        self.U_o = NN.Parameter(Sampler.sample((self.g, hidden_size, hidden_size)), requires_grad=True).to(device)
-        self.V_o = NN.Parameter(Sampler.sample((self.g, hidden_size, hidden_size)), requires_grad=True).to(device)
+        self.W_o = NN.Parameter(torch.zeros((1, hidden_size, input_size), requires_grad=True)).to(device)
+        self.U_o = NN.Parameter(torch.zeros((self.g, hidden_size, hidden_size), requires_grad=True)).to(device)
+        self.V_o = NN.Parameter(torch.zeros((self.g, hidden_size, hidden_size), requires_grad=True)).to(device)
+        NN.init.uniform_(self.W_o, 0, 0.1)
+        NN.init.uniform_(self.U_o, 0, 0.1)
+        NN.init.uniform_(self.V_o, 0, 0.1)
         # cell gate
-        self.W_c = NN.Parameter(Sampler.sample((1, hidden_size, input_size)), requires_grad=True).to(device)
-        self.U_c = NN.Parameter(Sampler.sample((self.g, hidden_size, hidden_size)), requires_grad=True).to(device)
+        self.W_c = NN.Parameter(torch.zeros((1, hidden_size, input_size), requires_grad=True)).to(device)
+        self.U_c = NN.Parameter(torch.zeros((self.g, hidden_size, hidden_size), requires_grad=True)).to(device)
+        NN.init.uniform_(self.W_c, 0, 0.1)
+        NN.init.uniform_(self.U_c, 0, 0.1)
         # Activate Func
         self.sigmoid = NN.Sigmoid()
         self.tanh = NN.Tanh()

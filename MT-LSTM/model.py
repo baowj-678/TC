@@ -10,7 +10,7 @@ import torch
 
 
 class Model(nn.Module):
-    def __init__(self, vocab, hidden_size, device, ave_length=19, embedding_size=128, num_class=5, embedding=None, p=0.1):
+    def __init__(self, vocab, hidden_size, device, ave_length=19, embedding_size=128, num_class=5, embedding=None, p=0.1, g=3):
         super(Model, self).__init__()
         self.device = device
         # Embedding
@@ -25,7 +25,8 @@ class Model(nn.Module):
                                input_size=embedding_size,
                                hidden_size=hidden_size,
                                batch_first=True,
-                               device=device)
+                               device=device,
+                               g=g)
         # MLP
         self.linear = nn.Linear(in_features=2*hidden_size,
                                 out_features=num_class,
