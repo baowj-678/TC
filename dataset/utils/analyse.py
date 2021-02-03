@@ -3,14 +3,10 @@
 @Email: bwj_678@qq.com
 @Date: 2020/10/31
 """
-import os
-import sys
+
 import matplotlib.pyplot as plt
 import nltk
-import json
-abs_path = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(abs_path)
-from data_deal import DataDeal
+from utils.data_deal import DataDeal
 
 
 

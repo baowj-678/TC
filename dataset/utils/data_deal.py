@@ -5,13 +5,8 @@
 @Date: 2020/10/27
 """
 import csv
-import sys
 import os
 import json
-
-relative_path = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(relative_path)
-import my_csv
 
 
 class DataDeal:

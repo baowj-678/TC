@@ -4,15 +4,7 @@
 @Date: 2020/10/30
 """
 import nltk
-import os
-import sys
-
-abs_path = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(abs_path)
-
-from dataset.utils import *
-
-
+from utils.data_deal import *
 class MakeVocab():
     def __init__(self):
         pass
@@ -20,9 +12,9 @@ class MakeVocab():
     @staticmethod
     def make_vocab_csv(path, tgt_path, seq_index, delimiter='\t'):
         """ 生成字典文件
-        :path: 原文件
+        :path: 原文件(列表，多个)
         :tgt_path: 目标文件存放位置
-        :head: 句子所在的列
+        :seq_index: 句子所在的列
         :delimiter: 分割符
         """
         vocab = set()
@@ -33,6 +25,7 @@ class MakeVocab():
                 sent = line[seq_index]
                 words = nltk.word_tokenize(sent)
                 for word in words:
+                    word = word.lower()
                     vocab.add(word)
         print("-"*8, "共{}词".format(len(vocab)), '-'*8)
         vocab = list(vocab)
@@ -40,8 +33,8 @@ class MakeVocab():
         return
 
 if __name__ == '__main__':
-    MakeVocab.make_vocab_csv(['D:/NLP/TC/dataset/SST-1/train.tsv', 'D:/NLP/TC/dataset/SST-1/test.tsv', 'D:/NLP/TC/dataset/SST-1/dev.tsv'],
-                             tgt_path='D:/NLP/TC/dataset/SST-1/vocab.txt',
-                             seq_index=1,
+    MakeVocab.make_vocab_csv(['IMDB/test.csv', 'IMDB/test.csv'],
+                             tgt_path='IMDB/vocab_.txt',
+                             seq_index=0,
                              delimiter='\t')
     # print(nltk.word_tokenize("The Rock is destined to be the 21st Century s newConan '' and that he s going to make a splash even greater than; it's Arnold Schwarzenegger , Jean-Claud Van Damme or Steven Segal"))
