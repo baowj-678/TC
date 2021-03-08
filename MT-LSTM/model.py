@@ -26,7 +26,8 @@ class Model(nn.Module):
                                hidden_size=hidden_size,
                                batch_first=True,
                                device=device,
-                               g=g)
+                               g=g,
+                               p=p)
         # MLP
         self.linear = nn.Linear(in_features=2*hidden_size,
                                 out_features=num_class,
@@ -52,7 +53,9 @@ class Model(nn.Module):
         input = pack_padded_sequence(input, length, batch_first=True)
         output, hidden_state = self.mt_lstm(input)
         output, out_length = pad_packed_sequence(output)
-        h, c = hidden_state # (batch_size, hidden_size)
+        h, c = hidden_state # (batch_size, group, hidden_size)
+        h = torch.sum(h, dim=1)
+        c = torch.sum(c, dim=1)
         out = torch.cat((h, c), dim=1) # (batch_size, 2*hidden_size)
         # MLP
         predict = self.linear(out) # (batch_size, num_class)
