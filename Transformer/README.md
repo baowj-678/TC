@@ -106,7 +106,7 @@ def attention(query, key, value, mask=None, dropout=None):
 
 相比于单个的**注意力**，更好的是将**查询向量**、**键向量**和**值向量**用$h$个学习得到的**线性层(linear projection)**分别投影到$d_k$和$d_v$维度。在每组投影后的向量组，可以并行地执行**注意力机制**，得到$d_v$维的输出。这些输出的向量会被**组合(concetenated)**然后再次执行上述操作。
 
-<img src="D:\NLP\TC\Transformer\.md\p2.png" alt="image-20210308214128253" style="zoom: 80%;" />
+<img src="D:\NLP\TC\Transformer\.md\p2.png" style="zoom: 80%;" />
 
 
 
@@ -177,41 +177,90 @@ class MultiHeadAttention(NN.Module):
 
 
 
+### Position-wise Feed-Forward Network
+
+除了**子层(sub-layers)**，**编码器(encoder)**和**解码器(decoder)**的每一层都包含一个**全连接网络(fully connect feed-forward network)**。
+
+$$\mathrm{FFN}(x)=\max(m0,xW_1+b_1)W_2+b_2$$
+
+*输出输出的维度为*$d_{model}=512$，*内部的维度为*$d_{ff}=2048$。
+
+~~~python
+class PositionwiseFeedForward(NN.Module):
+    def __init__(self, d_model, d_ff, dropout=0) -> None:
+        """
+        Param
+        -----
+        :d_model 模型(输入)维度
+        :d_ff 内部参数维度
+        """
+        super(PositionwiseFeedForward, self).__init__()
+        self.w_1 = NN.Linear(d_model, d_ff)
+        self.relu = NN.ReLU()
+        self.w_2 = NN.Linear(d_ff, d_model)
+        self.dropout = NN.Dropout(dropout)
+    
+    def forward(self, X):
+        """
+        Param
+        -----
+        :X (batch_size, seq_len, d_model)
+
+        Return
+        ------
+        :X (batch_size, seq_len, d_model)
+        """
+        X = self.relu(self.w_1(X))
+        X = self.dropout(X)
+        X = self.w_2(X)
+        return X
+~~~
 
 
 
 
 
+### Embedding
+
+这里使用学习得到的**词向量库**将**输入字词(token)**和**输出字词**转成$d_{model}$维的**词向量**；并且使用学得的**线性层**和**softmax层**将输出转成预测下一个**字词(token)**的**概率分布**。在该模型中，输入输出的Embedding共享参数，在Embedding层，在原来权重上乘以$\sqrt{d_{model}}$
+
+~~~python
+class Embedding(NN.Module):
+    def __init__(self, vocab_size, d_model) -> None:
+        """
+        Param
+        -----
+        :vocab_size 词典大小(int)
+        :d_model 模型维度(int)
+        """
+        super(Embedding, self).__init__()
+        self.embeddings = NN.Embedding(vocab_size, d_model)
+        self.sqrt_d_model = math.sqrt(d_model)
+    
+    def forward(self, X):
+        """
+        词向量编码
+        Param
+        -----
+        :X [torch.tensor](batch_size, max_seq_len)
+
+        Return
+        ------
+        :embed [torch.tensor](batch_size, max_seq_len, d_model)
+        """
+        embed = self.embeddings(X) * self.sqrt_d_model
+        return embed
+~~~
 
 
 
+### Add & Norm
 
 
 
+### Encoder Layer
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-### Multi-Head Attention
-
-
-
-
-
-
-
-
+### Encoder
 

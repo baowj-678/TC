@@ -10,8 +10,10 @@ import torch
 import torch.nn as NN
 from torch.autograd import Variable
 import torch.nn.functional as F
+from torch.nn.modules.dropout import Dropout
 
 class Transformer(NN.Module):
+    """ Transformer """
     def __init__(self, d_model, max_len):
         super(Transformer, self).__init__()
         self.PosEnc = PositionalEncoding(d_model, max_len)
@@ -137,3 +139,104 @@ class MultiHeadAttention(NN.Module):
         x = self.W_O(x)
         x = self.dropout(x)
         return x
+
+class PositionwiseFeedForward(NN.Module):
+    """ FeedForward"""
+    def __init__(self, d_model, d_ff, dropout=0) -> None:
+        """
+        Param
+        -----
+        :d_model 模型(输入)维度
+        :d_ff 内部参数维度
+        """
+        super(PositionwiseFeedForward, self).__init__()
+        self.w_1 = NN.Linear(d_model, d_ff)
+        self.relu = NN.ReLU()
+        self.w_2 = NN.Linear(d_ff, d_model)
+        self.dropout = NN.Dropout(dropout)
+    
+    def forward(self, X):
+        """
+        Param
+        -----
+        :X (batch_size, seq_len, d_model)
+
+        Return
+        ------
+        :X (batch_size, seq_len, d_model)
+        """
+        X = self.relu(self.w_1(X))
+        X = self.dropout(X)
+        X = self.w_2(X)
+        return X
+
+class Embedding(NN.Module):
+    def __init__(self, vocab_size, d_model) -> None:
+        """
+        Param
+        -----
+        :vocab_size 词典大小(int)
+        :d_model 模型维度(int)
+        """
+        super(Embedding, self).__init__()
+        self.embeddings = NN.Embedding(vocab_size, d_model)
+        self.sqrt_d_model = math.sqrt(d_model)
+    
+    def forward(self, X):
+        """
+        词向量编码
+        Param
+        -----
+        :X [torch.tensor](batch_size, max_seq_len)
+
+        Return
+        ------
+        :embed [torch.tensor](batch_size, max_seq_len, d_model)
+        """
+        embed = self.embeddings(X) * self.sqrt_d_model
+        return embed
+
+class AddNorm(NN.Module):
+    """ 残差连接 """
+    def __init__(self, seq_len, d_model, dropout=0.1) -> None:
+        super(AddNorm, self).__init__()
+        self.layernorm = NN.LayerNorm((seq_len, d_model))
+        self.dropout = NN.Dropout(dropout)
+    
+    def forward(self, X, sub_X):
+        sub_X = self.dropout(sub_X)
+        X = X + sub_X
+        X = self.layernorm(X)
+        return X
+
+class EncoderLayer(NN.Module):
+    def __init__(self, seq_len, d_model, h, dropout, d_ff) -> None:
+        """
+        一个编码层
+        Param
+        -----
+        :seq_len 句子长度
+        :d_model 模型维度
+        :h 头数
+        :dropout
+        """
+        super(EncoderLayer, self).__init__()
+        self.MultiHeadAttention = MultiHeadAttention(h, d_model, dropout)
+        self.addnorm  = AddNorm(seq_len, d_model, dropout)
+        self.FeedForward = PositionwiseFeedForward(d_model, d_ff, dropout)
+    
+    def forward(self, X, mask):
+        """
+        Param
+        -----
+        :X (batch_size, seq_len, d_model)
+        :mask (batch_size, seq_len, seq_len)
+
+        Return
+        ------
+        :X (batch_size, seq_len, d_model)
+        """
+        sub_X = self.MultiHeadAttention(X, X, X, mask)
+        X = self.addnorm(X, sub_X)
+        sub_X = self.FeedForward(X)
+        X = self.addnorm(X, sub_X)
