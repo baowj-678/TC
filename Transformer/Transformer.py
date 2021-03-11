@@ -12,15 +12,27 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 from torch.nn.modules.dropout import Dropout
 
-class Transformer(NN.Module):
+class TransformerGenerate(NN.Module):
     """ Transformer """
-    def __init__(self, d_model, max_len):
-        super(Transformer, self).__init__()
+    def __init__(self, d_model, d_ff, max_len, src_seq_len, tgt_seq_len, vocab_size, h=8, dropout=0.1, n_layers=6):
+        super(TransformerGenerate, self).__init__()
         self.PosEnc = PositionalEncoding(d_model, max_len)
+        self.encoder = Encoder(src_seq_len, d_model, h, dropout, d_ff, n_layers)
+        self.decoder = Decoder(tgt_seq_len, d_model, h, dropout, d_ff, n_layers)
+        self.linear = NN.Linear(d_model, vocab_size)
+        self.softmax = NN.Softmax(dim=-1)
+
+    def forward(self, X, src_mask, tgt_src_mask, tgt_mask, Y=None):
+        """
+        :X (batch_size, src_seq_len, d_model)
+        :src_mask (batch_size, src_seq_len, src_seq_len)
+        :tgt_src_mask (batch_size, tgt_seq_len, src_seq_len)
+        :tgt_seq_mask (batch_size, src_seq_len, src_seq_len)
+        :Y (batch_size, tgt_seq_len, d_model)
+        """
         pass
 
-    def forward(self, X):
-        pass
+
 
 
 class PositionalEncoding(NN.Module):
@@ -221,9 +233,11 @@ class EncoderLayer(NN.Module):
         :dropout
         """
         super(EncoderLayer, self).__init__()
-        self.MultiHeadAttention = MultiHeadAttention(h, d_model, dropout)
-        self.addnorm  = AddNorm(seq_len, d_model, dropout)
-        self.FeedForward = PositionwiseFeedForward(d_model, d_ff, dropout)
+        self.self_attn = MultiHeadAttention(h, d_model, dropout)
+        self.addnorm_1  = AddNorm(seq_len, d_model, dropout)
+        self.feed_forward = PositionwiseFeedForward(d_model, d_ff, dropout)
+        self.addnorm_2  = AddNorm(seq_len, d_model, dropout)
+
     
     def forward(self, X, mask):
         """
@@ -236,7 +250,157 @@ class EncoderLayer(NN.Module):
         ------
         :X (batch_size, seq_len, d_model)
         """
-        sub_X = self.MultiHeadAttention(X, X, X, mask)
-        X = self.addnorm(X, sub_X)
-        sub_X = self.FeedForward(X)
-        X = self.addnorm(X, sub_X)
+        sub_X = self.self_attn(X, X, X, mask)
+        X = self.addnorm_1(X, sub_X)
+        sub_X = self.feed_forward(X)
+        X = self.addnorm_2(X, sub_X)
+        return X
+
+
+class Encoder(NN.Module):
+    def __init__(self, seq_len, d_model, h, dropout, d_ff, n_layer=6) -> None:
+        """
+        编码器
+        Param
+        -----
+        :seq_len 句子长度
+        :d_model 模型维度
+        :h 头数
+        :dropout
+        :d_ff 前馈层的内部向量维度
+        :n_layer 编码器包含的层数
+        """
+        super(Encoder, self).__init__()
+        self.encoder_layers = [EncoderLayer(seq_len, d_model, h, dropout, d_ff) for i in range(n_layer)]
+    
+    def forward(self, X, mask):
+        """
+        Param
+        -----
+        :X (batch_size, seq_len, d_model)
+        :mask (batch_size, seq_len, seq_len)
+
+        Return
+        ------
+        :X (batch_size, seq_len, d_model)
+        """
+        for encoderlayer in self.encoder_layers:
+            X = encoderlayer(X, mask)
+        return X
+
+
+class DecoderLayer(NN.Module):
+    """ 解码器的子层 """
+    def __init__(self, tgt_len, d_model, h, dropout, d_ff) -> None:
+        """
+        Param
+        -----
+        :seq_len 句子长度
+        :d_model 模型维度
+        :h 头数
+        :dropout
+        :d_ff
+        """
+        super(DecoderLayer, self).__init__()
+        self.self_attn = MultiHeadAttention(h, d_model, dropout)
+        self.addnorm_1  = AddNorm(tgt_len, d_model, dropout)
+        self.src_attn = MultiHeadAttention(h, d_model, dropout)
+        self.addnorm_2  = AddNorm(tgt_len, d_model, dropout)
+        self.feed_forward = PositionwiseFeedForward(d_model, d_ff)
+        self.addnorm_3  = AddNorm(tgt_len, d_model, dropout)
+
+
+    def forward(self, X, M, src_mask, tgt_mask):
+        """
+        Param
+        -----
+        :X 训练时的目标语句 (batch_size, tgt_len, d_model)
+        :M encoder得到的数据 (batch_size, src_len, d_model)
+        :src_mask 对XM进行attention时的mask (batch_size, src_len, src_len)
+        :tgt_mask 生成目标语句的mask (batch_size, tgt_len, src_len)
+
+        Return
+        ------
+        :X (batch_size, tgt_len, d_model)
+        """
+        sub_X = self.self_attn(X, X, X, tgt_mask)
+        X = self.addnorm_1(X, sub_X)
+        sub_X = self.src_attn(X, M, M, src_mask)
+        X = self.addnorm_2(X, sub_X)
+        sub_X = self.feed_forward(X)
+        X = self.addnorm_3(X, sub_X)
+        return X
+
+
+class Decoder(NN.Module):
+    """ 解码器 """
+    def __init__(self, tgt_len, d_model, h, dropout, d_ff, n_layers) -> None:
+        super(Decoder, self).__init__()
+        self.decoderlayers = [DecoderLayer(tgt_len, d_model, h, dropout, d_ff) for i in range(n_layers)]
+    
+    def forward(self, X, M, src_mask, tgt_mask):
+        """
+        Param
+        -----
+        :X 训练时的目标语句 (batch_size, tgt_len, d_model)
+        :M encoder得到的数据 (batch_size, src_len, d_model)
+        :src_mask 对XM进行attention时的mask (batch_size, src_len, src_len)
+        :tgt_mask 生成目标语句的mask (batch_size, tgt_len, src_len)
+
+        Return
+        ------
+        :X (batch_size, tgt_len, d_model)
+        """
+        for decoderlayer in self.decoderlayers:
+            X = decoderlayer(X, M, src_mask, tgt_mask)
+        return X
+
+
+def en_seq_mask(seq_len, tgt_len, src_len):
+    """
+    encoder的句子mask
+    Param
+    -----
+    :seq_len (list) (batch_size)
+    :max_len (int)
+
+    Return
+    ------
+    :mask (torch.ByteTensor) (batch_size, max_len, max_len)
+    """
+    batch_size = len(seq_len)
+    mask = torch.ones(size=(batch_size, tgt_len, src_len), dtype=torch.bool)
+    for mask_i, length in zip(mask, seq_len):
+        mask_i[0:min(length, tgt_len), 0:min(length, src_len)] = torch.zeros((min(length, tgt_len), min(length, src_len)), dtype=torch.bool)
+    return mask
+
+def de_seq_mask(tgt_len):
+    """
+    生成上三角的mask
+
+    Param
+    -----
+    :tgt_len 方阵边长 (int)
+
+    Return
+    ------
+    :mask (1, tgt_len, tgt_len)
+    """
+    mask = torch.ones((1, tgt_len, tgt_len), dtype=torch.bool)
+    mask = torch.triu(mask, diagonal=1)
+    return mask
+
+# tgt_len = 25
+# src_len = 23
+# d_model = 512
+# h = 8
+# dropout = 0.1
+# d_ff = 2048
+# batch_size = 13
+# seq_lens = [22, 21, 21, 20, 18, 15, 17, 19, 13, 12, 11, 11, 10]
+# M = torch.randn((batch_size, src_len, d_model))
+# X = torch.randn((batch_size, tgt_len, d_model))
+# src_mask = en_seq_mask(seq_lens, tgt_len, src_len)
+# tgt_mask = de_seq_mask(tgt_len)
+# model = Decoder(tgt_len, d_model, h, dropout, d_ff, 6)
+# model(X, M, src_mask, tgt_mask)

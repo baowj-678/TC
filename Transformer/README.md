@@ -106,7 +106,7 @@ def attention(query, key, value, mask=None, dropout=None):
 
 相比于单个的**注意力**，更好的是将**查询向量**、**键向量**和**值向量**用$h$个学习得到的**线性层(linear projection)**分别投影到$d_k$和$d_v$维度。在每组投影后的向量组，可以并行地执行**注意力机制**，得到$d_v$维的输出。这些输出的向量会被**组合(concetenated)**然后再次执行上述操作。
 
-<img src="D:\NLP\TC\Transformer\.md\p2.png" style="zoom: 80%;" />
+<img src=".md\p2.png" style="zoom: 80%;" />
 
 
 
@@ -256,11 +256,253 @@ class Embedding(NN.Module):
 
 ### Add & Norm
 
+**残差连接**加上**层归一化**。
+
+$$\mathrm{LayerNorm(x+\mathrm{Sublayer}(x))}$$
+
+~~~python
+class AddNorm(NN.Module):
+    """ 残差连接 """
+    def __init__(self, seq_len, d_model, dropout=0.1) -> None:
+        super(AddNorm, self).__init__()
+        self.layernorm = NN.LayerNorm((seq_len, d_model))
+        self.dropout = NN.Dropout(dropout)
+    
+    def forward(self, X, sub_X):
+        sub_X = self.dropout(sub_X)
+        X = X + sub_X
+        X = self.layernorm(X)
+        return X
+~~~
+
 
 
 ### Encoder Layer
 
+每一个编码层有两个子层，第一层是**多头自注意力机制(multi-head self-attention mechanism)**，第二层是**位置全连接前馈层(position-wise fully  connected feed-forward network)**，每个子层后都会加一个**残差连接(residual connection)**和**层规范化化(layer normalization)**。
+
+<img src=".md\p3.png" alt="EncoderLayer" style="zoom:80%;" />
+
+~~~python
+class EncoderLayer(NN.Module):
+    def __init__(self, seq_len, d_model, h, dropout, d_ff) -> None:
+        """
+        一个编码层
+        Param
+        -----
+        :seq_len 句子长度
+        :d_model 模型维度
+        :h 头数
+        :dropout
+        """
+        super(EncoderLayer, self).__init__()
+        self.self_attn = MultiHeadAttention(h, d_model, dropout)
+        self.addnorm  = AddNorm(seq_len, d_model, dropout)
+        self.feed_forward = PositionwiseFeedForward(d_model, d_ff, dropout)
+    
+    def forward(self, X, mask):
+        """
+        Param
+        -----
+        :X (batch_size, seq_len, d_model)
+        :mask (batch_size, seq_len, seq_len)
+
+        Return
+        ------
+        :X (batch_size, seq_len, d_model)
+        """
+        sub_X = self.self_attn(X, X, X, mask)
+        X = self.addnorm(X, sub_X)
+        sub_X = self.feed_forward(X)
+        X = self.addnorm(X, sub_X)
+        return X
+~~~
+
+
+
+### Decoder Layer
+
+每个解码层有三个子层，除了编码层的两层外，加入了在**编码器输出**和**解码器**之间的**多头注意力**层，即图中**Multi-Head Attention**层。其中**query**来自解码器，**key、value**均来自编码器输出。同时在**自注意力层**，即**Masked Multi-Head Attention**层，修改了**mask**的方法使得第$i$位置的字词生成只能依赖于**小于$i$的位置**的字词。
+
+<img src=".md\p4.png" alt="DecoderLayer" style="zoom:80%;" />
+
+~~~python
+class DecoderLayer(NN.Module):
+    """ 解码器的子层 """
+    def __init__(self, tgt_len, d_model, h, dropout, d_ff) -> None:
+        """
+        Param
+        -----
+        :seq_len 句子长度
+        :d_model 模型维度
+        :h 头数
+        :dropout
+        :d_ff
+        """
+        super(DecoderLayer, self).__init__()
+        self.self_attn = MultiHeadAttention(h, d_model, dropout)
+        self.addnorm_1  = AddNorm(tgt_len, d_model, dropout)
+        self.src_attn = MultiHeadAttention(h, d_model, dropout)
+        self.addnorm_2  = AddNorm(tgt_len, d_model, dropout)
+        self.feed_forward = PositionwiseFeedForward(d_model, d_ff)
+        self.addnorm_3  = AddNorm(tgt_len, d_model, dropout)
+
+
+    def forward(self, X, M, src_mask, tgt_mask):
+        """
+        Param
+        -----
+        :X 训练时的目标语句 (batch_size, tgt_len, d_model)
+        :M encoder得到的数据 (batch_size, src_len, d_model)
+        :src_mask 对XM进行attention时的mask (batch_size, src_len, src_len)
+        :tgt_mask 生成目标语句的mask (batch_size, tgt_len, src_len)
+
+        Return
+        ------
+        :X (batch_size, tgt_len, d_model)
+        """
+        sub_X = self.self_attn(X, X, X, tgt_mask)
+        X = self.addnorm_1(X, sub_X)
+        sub_X = self.src_attn(X, M, M, src_mask)
+        X = self.addnorm_2(X, sub_X)
+        sub_X = self.feed_forward(X)
+        X = self.addnorm_3(X, sub_X)
+        return X
+~~~
+
+
+
 
 
 ### Encoder
+
+**编码器(encoder)**由$N=6$层**Encoder Layer**叠加而成。
+
+~~~python
+class Encoder(NN.Module):
+    def __init__(self, seq_len, d_model, h, dropout, d_ff, n_layer=6) -> None:
+        """
+        编码器
+        Param
+        -----
+        :seq_len 句子长度
+        :d_model 模型维度
+        :h 头数
+        :dropout
+        :d_ff 前馈层的内部向量维度
+        :n_layer 编码器包含的层数
+        """
+        super(Encoder, self).__init__()
+        encoder_layers = [EncoderLayer(seq_len, d_model, h, dropout, d_ff) for i in range(n_layer)]
+        self.encoder = NN.Sequential(
+            *encoder_layers
+        )
+    
+    def forward(self, X, mask):
+        """
+        Param
+        -----
+        :X (batch_size, seq_len, d_model)
+        :mask (batch_size, seq_len, seq_len)
+
+        Return
+        ------
+        :X (batch_size, seq_len, d_model)
+        """
+        return self.encoder(X, mask)
+~~~
+
+
+
+### Decoder
+
+**解码器(decoder)**由$N=6$层**Decoder Layer**叠加而成。
+
+~~~python
+class Decoder(NN.Module):
+    """ 解码器 """
+    def __init__(self, tgt_len, d_model, h, dropout, d_ff, n_layers) -> None:
+        super(Decoder, self).__init__()
+        self.decoderlayers = [DecoderLayer(tgt_len, d_model, h, dropout, d_ff) for i in range(n_layers)]
+    
+    def forward(self, X, M, src_mask, tgt_mask):
+        """
+        Param
+        -----
+        :X 训练时的目标语句 (batch_size, tgt_len, d_model)
+        :M encoder得到的数据 (batch_size, src_len, d_model)
+        :src_mask 对XM进行attention时的mask (batch_size, src_len, src_len)
+        :tgt_mask 生成目标语句的mask (batch_size, tgt_len, src_len)
+
+        Return
+        ------
+        :X (batch_size, tgt_len, d_model)
+        """
+        for decoderlayer in self.decoderlayers:
+            X = decoderlayer(X, M, src_mask, tgt_mask)
+        return X
+~~~
+
+
+
+### mask
+
+**生成编码的Attention的mask**，如下格式
+
+`[[False, False,  True,  True,  True],
+      [False, False,  True,  True,  True],
+      [ True,  True,  True,  True,  True],
+      [ True,  True,  True,  True,  True],
+      [ True,  True,  True,  True,  True]],`
+
+~~~python
+def en_seq_mask(seq_len, max_len):
+    """
+    encoder的句子mask
+    Param
+    -----
+    :seq_len (list) (batch_size)
+    :max_len (int)
+
+    Return
+    ------
+    :mask (torch.ByteTensor) (batch_size, max_len, max_len)
+    """
+    batch_size = len(seq_len)
+    mask = torch.ones(size=(batch_size, max_len, max_len), dtype=torch.bool)
+    for mask_i, length in zip(mask, seq_len):
+        mask_i[0:length, 0:length] = torch.zeros((length, length), dtype=torch.bool)
+    return mask
+
+~~~
+
+
+
+**生成上三角的Attention**，如下格式
+
+`[[[False,  True,  True,  True,  True,  True,  True],
+       [False, False,  True,  True,  True,  True,  True],
+       [False, False, False,  True,  True,  True,  True],
+       [False, False, False, False,  True,  True,  True],
+       [False, False, False, False, False,  True,  True],
+       [False, False, False, False, False, False,  True],
+       [False, False, False, False, False, False, False]]]`
+
+~~~python
+def de_seq_mask(tgt_len):
+    """
+    生成上三角的mask
+
+    Param
+    -----
+    :tgt_len 方阵边长 (int)
+
+    Return
+    ------
+    :mask (1, tgt_len, tgt_len)
+    """
+    mask = torch.ones((1, tgt_len, tgt_len), dtype=torch.bool)
+    mask = torch.triu(mask, diagonal=1)
+    return mask
+~~~
 
